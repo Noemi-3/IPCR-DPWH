@@ -1,65 +1,46 @@
 <?php
-require '../config/database.php';
 session_start();
+require '../config/database.php';
 
-$user_id      = $_POST['user_id'] ?? null;
-$period_id    = $_POST['period_id'] ?? null;
-$period_month = $_POST['period_month'] ?? null;
-$period_year  = isset($_POST['period_year']) ? (int)$_POST['period_year'] : null;
-
-if (!$user_id || (!$period_id && (!$period_month || !$period_year))) {
-    header('Location: index.php');
-    exit;
-}
-
-// If a period_id wasn't supplied, resolve by month+year (create if missing)
-if (!$period_id) {
-    $allowedMonths = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    if (!in_array($period_month, $allowedMonths, true)) {
-        header('Location: index.php');
-        exit;
-    }
-
-    $stmt = $conn->prepare("SELECT id FROM login_periods WHERE month = ? AND year = ?");
-    $stmt->bind_param('si', $period_month, $period_year);
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['user_id'])) {
+    $user_id = (int)$_POST['user_id'];
+    
+    $stmt = $conn->prepare("SELECT id, full_name, role FROM users WHERE id = ?");
+    $stmt->bind_param("i", $user_id);
     $stmt->execute();
-    $stmt->store_result();
-
-    if ($stmt->num_rows === 1) {
-        $stmt->bind_result($found_id);
-        $stmt->fetch();
-        $period_id = $found_id;
-    } else if ($stmt->num_rows === 0) {
-        $ins = $conn->prepare("INSERT INTO login_periods (month, year) VALUES (?, ?)");
-        $ins->bind_param('si', $period_month, $period_year);
-        if ($ins->execute()) {
-            $period_id = $ins->insert_id;
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        $user = $result->fetch_assoc();
+        $_SESSION['user_id'] = $user['id'];
+        $_SESSION['role'] = $user['role'];
+        
+        // CHECK IF A SPECIFIC PERIOD WAS CHOSEN ON THE LOGIN SCREEN
+        if (isset($_POST['period_id']) && !empty($_POST['period_id'])) {
+            $_SESSION['period_id'] = (int)$_POST['period_id'];
         } else {
-            header('Location: index.php');
-            exit;
+            // AUTO-FETCH THE LATEST SEMESTER AS THE DEFAULT FALLBACK (For Admins)
+            $period_query = $conn->query("SELECT id FROM login_periods ORDER BY year DESC, id DESC LIMIT 1");
+            if ($period_query->num_rows > 0) {
+                $_SESSION['period_id'] = $period_query->fetch_assoc()['id'];
+            } else {
+                $_SESSION['period_id'] = 1; // Failsafe
+            }
         }
-    } else {
-        $stmt2 = $conn->prepare("SELECT id FROM login_periods WHERE month = ? AND year = ? LIMIT 1");
-        $stmt2->bind_param('si', $period_month, $period_year);
-        $stmt2->execute();
-        $res = $stmt2->get_result()->fetch_assoc();
-        $period_id = $res['id'] ?? null;
-        if (!$period_id) { header('Location: index.php'); exit; }
+        
+        // ROUTING LOGIC based on Role
+        if ($user['role'] == 0 || $user['role'] == 2) {
+            // Admins & Moderators go to the main System Dashboard
+            header("Location: home.php");
+        } else {
+            // Regular Employees go straight to their own IPCR
+            header("Location: ipcr.php");
+        }
+        exit();
     }
 }
 
-// Validate user exists
-$stmt = $conn->prepare("SELECT id FROM users WHERE id = ?");
-$stmt->bind_param("i", $user_id);
-$stmt->execute();
-$stmt->store_result();
-
-if ($stmt->num_rows === 1) {
-    $_SESSION['user_id']   = $user_id;
-    $_SESSION['period_id'] = $period_id;
-    header('Location: ipcr.php');
-    exit;
-}
-
-header('Location: index.php');
-exit;
+// If something goes wrong, send them back to login
+header("Location: index.php");
+exit();
+?>
