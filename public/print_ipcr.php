@@ -2,23 +2,25 @@
 require '../config/database.php';
 require '../includes/session.php';
 
-$user_id   = $_SESSION['user_id'];
-$period_id = $_SESSION['period_id'];
+// 1. Determine TARGET User and TARGET Period
+// If URL parameters exist, use them. Otherwise, fall back to the logged-in session.
+$user_id   = isset($_GET['uid']) ? intval($_GET['uid']) : $_SESSION['user_id'];
+$period_id = isset($_GET['period_id']) ? intval($_GET['period_id']) : $_SESSION['period_id'];
 
-// 1. Fetch User Data
+// 2. Fetch User Data
 $u = $conn->prepare("SELECT full_name, position, division FROM users WHERE id=?");
 $u->bind_param("i", $user_id);
 $u->execute();
 $user = $u->get_result()->fetch_assoc();
 
-// 2. Fetch Period
+// 3. Fetch Period Data
 $p = $conn->prepare("SELECT month, year FROM login_periods WHERE id=?");
 $p->bind_param("i", $period_id);
 $p->execute();
 $period = $p->get_result()->fetch_assoc();
-$period_display = strtoupper($period['month'] . ' ' . $period['year']); // e.g., JULY to DECEMBER 2025
+$period_display = strtoupper($period['month'] . ' ' . $period['year']); 
 
-// 3. Fetch Tasks & Ratings (STRICTLY FILTERED BY PERIOD)
+// 4. Fetch Tasks & Ratings (STRICTLY FILTERED BY TARGET PERIOD AND USER)
 $sql = "
 SELECT 
     t.id AS task_id,
@@ -39,7 +41,6 @@ ORDER BY
 ";
 
 $stmt = $conn->prepare($sql);
-// We bind 4 parameters here ("iiii") because period_id is used twice (once for accomplishments, once for the task assignment)
 $stmt->bind_param("iiii", $user_id, $period_id, $user_id, $period_id);
 $stmt->execute();
 $result = $stmt->get_result();
@@ -73,13 +74,14 @@ while($row = $result->fetch_assoc()){
 
 $final_rating = $count > 0 ? number_format($grand_total / $count, 2) : "0.00";
 
-// Adjectival Rating Logic [cite: 172]
+// Adjectival Rating Logic
 $adjectival = "";
 if ($final_rating >= 4.51) $adjectival = "Outstanding";
 else if ($final_rating >= 3.51) $adjectival = "Very Satisfactory";
 else if ($final_rating >= 2.51) $adjectival = "Satisfactory";
 else if ($final_rating >= 1.51) $adjectival = "Unsatisfactory";
-else $adjectival = "Poor";
+else if ($final_rating > 0) $adjectival = "Poor";
+else $adjectival = "---"; // If completely empty
 
 ?>
 <!DOCTYPE html>

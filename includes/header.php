@@ -5,6 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IPCR Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    // 1. Tell Tailwind to use manual CSS classes for dark mode
+    tailwind.config = {
+        darkMode: 'class',
+    }
+
+    // 2. Check the user's preference immediately to prevent a "white flash" on load
+    if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+    } else {
+        document.documentElement.classList.remove('dark');
+    }
+</script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <style>
