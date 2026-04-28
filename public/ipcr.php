@@ -53,16 +53,28 @@ $p->execute();
 $period = $p->get_result()->fetch_assoc();
 $period_display = $period['month'] . ' ' . $period['year']; 
 
+// SQL: JOINs task_accomplishments to fetch saved ratings and remarks
 $sql = "
-SELECT t.id AS task_id, t.task_code, t.task_title, t.success_indicator
+SELECT 
+    t.id AS task_id, 
+    t.task_code, 
+    t.task_title, 
+    t.success_indicator,
+    ta.actual_accomplishment,
+    ta.q_rating,
+    ta.e_rating,
+    ta.t_rating,
+    ta.remarks
 FROM user_tasks ut
 JOIN tasks t ON t.id = ut.task_id
+LEFT JOIN task_accomplishments ta ON (ta.task_id = t.id AND ta.user_id = ? AND ta.period_id = ?)
 WHERE ut.user_id = ? AND ut.period_id = ?
 ORDER BY CAST(SUBSTRING_INDEX(t.task_code,'.',1) AS UNSIGNED), CAST(SUBSTRING_INDEX(t.task_code,'.',-1) AS UNSIGNED)
 ";
 $stmt = $conn->prepare($sql);
 
-$stmt->bind_param("ii", $target_user_id, $period_id);
+// Bind the 4 parameters
+$stmt->bind_param("iiii", $target_user_id, $period_id, $target_user_id, $period_id);
 $stmt->execute();
 $tasks = $stmt->get_result();
 
@@ -140,8 +152,23 @@ require '../includes/sidebar.php';
                 <form id="ipcr-form" method="POST" action="save_ipcr.php">
                     <input type="hidden" name="target_user_id" value="<?= $target_user_id ?>">
                     
+                    <input type="hidden" name="period_id_override" value="<?= $period_id ?>">
+                    
                     <div class="space-y-6">
-                        <?php while ($t = $tasks->fetch_assoc()): $siCode = trim($t['task_code']); ?>
+                        <?php 
+                        while ($t = $tasks->fetch_assoc()): 
+                            $siCode = trim($t['task_code']); 
+                            
+                            // Calculate the initial row average based on loaded data
+                            $q_val = $t['q_rating'] ?? 0;
+                            $e_val = $t['e_rating'] ?? 0;
+                            $t_val = $t['t_rating'] ?? 0;
+                            $div = 0; $sum = 0;
+                            if($q_val > 0) { $sum += $q_val; $div++; }
+                            if($e_val > 0) { $sum += $e_val; $div++; }
+                            if($t_val > 0) { $sum += $t_val; $div++; }
+                            $row_avg = $div > 0 ? number_format($sum/$div, 2) : '0.00';
+                        ?>
                         <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden hover:shadow-md transition-all duration-200 task-row" id="row-<?= $t['task_id'] ?>">
                             <div class="grid grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 dark:divide-slate-700">
                                 
@@ -169,23 +196,30 @@ require '../includes/sidebar.php';
                                     <?php endif; ?>
                                 </div>
 
-                                <div class="col-span-12 lg:col-span-6 p-5 relative smart-cell" data-task-id="<?= $t['task_id'] ?>" data-si-code="<?= htmlspecialchars($t['task_id']) ?>" data-success-indicator="<?= htmlspecialchars($t['success_indicator']) ?>">
+                                <div class="col-span-12 lg:col-span-4 p-5 relative smart-cell" data-task-id="<?= $t['task_id'] ?>" data-si-code="<?= htmlspecialchars($t['task_id']) ?>" data-success-indicator="<?= htmlspecialchars($t['success_indicator']) ?>">
                                     <label class="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">Actual Accomplishment</label>
-                                    <div class="smart-area w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 transition-all shadow-inner" contenteditable="<?= $content_editable_state ?>" id="div-<?= $t['task_id'] ?>" placeholder="Accomplishments will auto-generate here based on ratings..."></div>
-                                    <input type="hidden" name="narrative[<?= $t['task_id'] ?>]" id="input-<?= $t['task_id'] ?>">
-                                    <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-2 text-right">Auto-generated based on QET ratings</p>
+                                    
+                                    <div class="smart-area w-full p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-blue-500 dark:focus:border-blue-400 transition-all shadow-inner" contenteditable="<?= $content_editable_state ?>" id="div-<?= $t['task_id'] ?>" placeholder="Accomplishments will auto-generate here based on ratings..."><?= $t['actual_accomplishment'] ?? '' ?></div>
+                                    
+                                    <input type="hidden" name="narrative[<?= $t['task_id'] ?>]" id="input-<?= $t['task_id'] ?>" value="<?= htmlspecialchars($t['actual_accomplishment'] ?? '') ?>">
+                                    <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-2 text-right">Auto-generated based on QET</p>
                                 </div>
 
                                 <div class="col-span-12 lg:col-span-2 bg-slate-50 dark:bg-slate-800/80 p-4 flex flex-col justify-center items-center space-y-3">
                                     <div class="w-full space-y-2">
-                                        <div class="flex items-center justify-between"><span class="text-xs font-bold text-slate-500 dark:text-slate-400 w-4">Q</span><input type="number" name="q[<?= $t['task_id'] ?>]" step="1" min="1" max="5" <?= $input_state ?> class="rating-input w-12 h-8 text-center text-sm font-bold text-slate-700 dark:text-white bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"></div>
-                                        <div class="flex items-center justify-between"><span class="text-xs font-bold text-slate-500 dark:text-slate-400 w-4">E</span><input type="number" name="e[<?= $t['task_id'] ?>]" step="1" min="1" max="5" <?= $input_state ?> class="rating-input w-12 h-8 text-center text-sm font-bold text-slate-700 dark:text-white bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"></div>
-                                        <div class="flex items-center justify-between"><span class="text-xs font-bold text-slate-500 dark:text-slate-400 w-4">T</span><input type="number" name="t[<?= $t['task_id'] ?>]" step="1" min="1" max="5" <?= $input_state ?> class="rating-input w-12 h-8 text-center text-sm font-bold text-slate-700 dark:text-white bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"></div>
+                                        <div class="flex items-center justify-between"><span class="text-xs font-bold text-slate-500 dark:text-slate-400 w-4">Q</span><input type="number" name="q[<?= $t['task_id'] ?>]" value="<?= htmlspecialchars($t['q_rating'] ?? '') ?>" step="1" min="1" max="5" <?= $input_state ?> class="rating-input w-12 h-8 text-center text-sm font-bold text-slate-700 dark:text-white bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"></div>
+                                        <div class="flex items-center justify-between"><span class="text-xs font-bold text-slate-500 dark:text-slate-400 w-4">E</span><input type="number" name="e[<?= $t['task_id'] ?>]" value="<?= htmlspecialchars($t['e_rating'] ?? '') ?>" step="1" min="1" max="5" <?= $input_state ?> class="rating-input w-12 h-8 text-center text-sm font-bold text-slate-700 dark:text-white bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"></div>
+                                        <div class="flex items-center justify-between"><span class="text-xs font-bold text-slate-500 dark:text-slate-400 w-4">T</span><input type="number" name="t[<?= $t['task_id'] ?>]" value="<?= htmlspecialchars($t['t_rating'] ?? '') ?>" step="1" min="1" max="5" <?= $input_state ?> class="rating-input w-12 h-8 text-center text-sm font-bold text-slate-700 dark:text-white bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"></div>
                                     </div>
                                     <div class="w-full pt-3 border-t border-slate-200 dark:border-slate-700 mt-2 text-center">
                                         <span class="text-[10px] text-slate-400 dark:text-slate-500 uppercase font-bold block">AVG</span>
-                                        <span class="text-xl font-black text-slate-800 dark:text-white avg-cell" id="avg-<?= $t['task_id'] ?>">0.00</span>
+                                        <span class="text-xl font-black text-slate-800 dark:text-white avg-cell" id="avg-<?= $t['task_id'] ?>"><?= $row_avg ?></span>
                                     </div>
+                                </div>
+
+                                <div class="col-span-12 lg:col-span-2 p-4 bg-slate-50/50 dark:bg-slate-800/50 flex flex-col">
+                                    <label class="block text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2 text-center lg:text-left">Remarks</label>
+                                    <textarea name="remarks[<?= $t['task_id'] ?>]" id="remarks-<?= $t['task_id'] ?>" <?= $input_state ?> class="w-full flex-1 min-h-[100px] p-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-xs text-slate-700 dark:text-slate-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none shadow-inner placeholder-slate-400" placeholder="<?= $can_edit ? 'Optional notes...' : 'No remarks.' ?>"><?= htmlspecialchars($t['remarks'] ?? '') ?></textarea>
                                 </div>
 
                             </div>

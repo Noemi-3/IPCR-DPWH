@@ -3,7 +3,6 @@ require '../config/database.php';
 require '../includes/session.php';
 
 // 1. Determine TARGET User and TARGET Period
-// If URL parameters exist, use them. Otherwise, fall back to the logged-in session.
 $user_id   = isset($_GET['uid']) ? intval($_GET['uid']) : $_SESSION['user_id'];
 $period_id = isset($_GET['period_id']) ? intval($_GET['period_id']) : $_SESSION['period_id'];
 
@@ -18,9 +17,11 @@ $p = $conn->prepare("SELECT month, year FROM login_periods WHERE id=?");
 $p->bind_param("i", $period_id);
 $p->execute();
 $period = $p->get_result()->fetch_assoc();
-$period_display = strtoupper($period['month'] . ' ' . $period['year']); 
 
-// 4. Fetch Tasks & Ratings (STRICTLY FILTERED BY TARGET PERIOD AND USER)
+// Format the period correctly
+$period_display = strtoupper($period['month'] . ', ' . $period['year']); 
+
+// 4. Fetch Tasks & Ratings
 $sql = "
 SELECT 
     t.id AS task_id,
@@ -30,7 +31,8 @@ SELECT
     ta.actual_accomplishment,
     ta.q_rating,
     ta.e_rating,
-    ta.t_rating
+    ta.t_rating,
+    ta.remarks 
 FROM user_tasks ut
 JOIN tasks t ON t.id = ut.task_id
 LEFT JOIN task_accomplishments ta ON (ta.task_id = t.id AND ta.user_id = ? AND ta.period_id = ?)
@@ -50,7 +52,6 @@ $grand_total = 0;
 $count = 0;
 
 while($row = $result->fetch_assoc()){
-    // Calculate row average
     $q = $row['q_rating'] ?? 0;
     $e = $row['e_rating'] ?? 0;
     $t = $row['t_rating'] ?? 0;
@@ -81,7 +82,7 @@ else if ($final_rating >= 3.51) $adjectival = "Very Satisfactory";
 else if ($final_rating >= 2.51) $adjectival = "Satisfactory";
 else if ($final_rating >= 1.51) $adjectival = "Unsatisfactory";
 else if ($final_rating > 0) $adjectival = "Poor";
-else $adjectival = "---"; // If completely empty
+else $adjectival = "---";
 
 ?>
 <!DOCTYPE html>
@@ -111,7 +112,7 @@ else $adjectival = "---"; // If completely empty
         .uppercase { text-transform: uppercase; }
         .w-100 { width: 100%; }
         
-        /* TABLE STYLES - Strict borders for government forms */
+        /* TABLE STYLES */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -127,27 +128,23 @@ else $adjectival = "---"; // If completely empty
         .header-title {
             text-align: center;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 15px;
             border: 1px solid #000;
-            padding: 5px;
+            padding: 4px;
             margin-bottom: 15px;
+            text-transform: uppercase;
         }
         
         .commitment-p {
             margin-bottom: 15px;
-            text-align: justify;
+            text-align: left;
+            font-size: 11px;
         }
         
-        /* SIGNATORY BOXES */
-        .sig-table td { border: 1px solid #000; padding: 5px; }
-        .sig-label { font-size: 9px; margin-bottom: 20px; }
-        .sig-name { font-weight: bold; font-size: 12px; text-align: center; text-transform: uppercase; }
-        
-        /* CONTENT TABLE */
-        .main-table th { background-color: #eee; text-align: center; font-weight: bold; font-size: 10px; }
+        /* MAIN CONTENT TABLE */
+        .main-table th { background-color: #fcfcfc; text-align: center; font-weight: bold; font-size: 10px; vertical-align: middle;}
         .rating-col { width: 30px; text-align: center; }
         
-        /* PRESERVE UNDERLINES FROM DATABASE */
         u { text-decoration: underline; font-weight: bold; }
     </style>
 </head>
@@ -158,54 +155,62 @@ else $adjectival = "---"; // If completely empty
 
     <p class="commitment-p">
         I, <span class="text-bold text-underline uppercase"><?= htmlspecialchars($user['full_name']) ?></span>, 
-        <span class="text-bold text-underline"><?= htmlspecialchars($user['position']) ?></span> of 
-        <span class="text-bold text-underline"><?= htmlspecialchars($user['division']) ?></span>, 
-        DPWH - Butuan City DEO, commit to deliver and agree to be rated on the attainment of the following targets 
-        in accordance with the indicated measures for the period <span class="text-bold text-underline"><?= $period_display ?></span>.
+        <span class="text-bold text-underline"><?= htmlspecialchars($user['position']) ?> <?= !empty($user['division']) ? '/ ' . htmlspecialchars($user['division']) : '' ?></span>, of 
+        <span class="text-bold text-underline">DPWH – Butuan City DEO</span>, commit to deliver and agree to be rated on the attainment of the following targets in accordance with the indicated measures for the period <span class="text-bold text-underline uppercase"><?= $period_display ?></span>.
     </p>
 
-    <table class="sig-table">
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border: none;">
         <tr>
-            <td width="60%">
-                <div class="sig-label">Approved by:</div>
-                <div class="text-center text-bold" style="margin-bottom: 5px;">District Office PMT Chairman</div>
-                <div style="display: flex; justify-content: space-between; align-items: flex-end;">
-                    <div style="text-align: center; width: 50%;">
-                        <div class="sig-name" style="text-decoration: underline;">JOSE CAESAR A. RADAZA</div>
-                        <div style="font-size: 10px;">Name</div>
-                    </div>
-                    <div style="text-align: center; width: 50%;">
-                        <div class="sig-name" style="text-decoration: underline;">District Engineer</div>
-                        <div style="font-size: 10px;">Position</div>
-                    </div>
-                </div>
+            <td style="width: 60%; padding: 0; border: none; vertical-align: top;">
+                <table style="width: 100%; border-collapse: collapse; border: 1px solid #000; margin-bottom: 0;">
+                    <tr>
+                        <td style="width: 15%; border: 1px solid #000; padding: 2px 4px; font-size: 10px;">Approved by:</td>
+                        <td colspan="3" style="border: 1px solid #000; padding: 2px 4px; text-align: center; font-weight: bold; font-size: 12px;">District Office PMT Chairman</td>
+                    </tr>
+                    <tr>
+                        <td style="width: 15%; border: 1px solid #000; padding: 2px 4px; font-size: 10px;">Signature:</td>
+                        <td style="width: 35%; border: 1px solid #000; padding: 2px 4px;"></td>
+                        <td style="width: 15%; border: 1px solid #000; padding: 2px 4px; font-size: 10px;">Position:</td>
+                        <td style="width: 35%; border: 1px solid #000; padding: 2px 4px; text-align: center; font-weight: bold; font-size: 10px;">District Engineer</td>
+                    </tr>
+                    <tr>
+                        <td style="width: 15%; border: 1px solid #000; padding: 2px 4px; font-size: 10px;">Name:</td>
+                        <td style="width: 35%; border: 1px solid #000; padding: 2px 4px; text-align: center; font-weight: bold; font-size: 10px;">JOSE CAESAR A. RADAZA</td>
+                        <td style="width: 15%; border: 1px solid #000; padding: 2px 4px; font-size: 10px;">Office:</td>
+                        <td style="width: 35%; border: 1px solid #000; padding: 2px 4px; text-align: center; font-weight: bold; font-size: 10px;">Office of the District Engineer</td>
+                    </tr>
+                </table>
             </td>
-            <td width="40%" style="vertical-align: bottom;">
-                <div class="text-center">
-                    <div style="border-bottom: 1px solid #000; width: 80%; margin: 0 auto;">&nbsp;</div>
-                    <div style="font-size: 10px; margin-top: 2px;">Signature of Ratee</div>
+            <td style="width: 40%; padding: 0 0 0 20px; border: none; vertical-align: bottom;">
+                <div style="text-align: center; margin-bottom: 12px;">
+                    <div style="border-bottom: 1px solid #000; width: 85%; margin: 0 auto;"></div>
+                    <div style="font-size: 10px; font-weight: bold; margin-top: 2px;">Signature of Ratee</div>
                 </div>
-                <div style="margin-top: 10px;">
-                    Date Prepared: <span style="text-decoration: underline;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                <div style="font-size: 10px; font-weight: bold; padding-left: 20px;">
+                    Date Prepared: <span style="display: inline-block; width: 50%; border-bottom: 1px solid #000; margin-left: 5px;">&nbsp;</span>
                 </div>
             </td>
         </tr>
     </table>
 
-    <table class="main-table">
+    <table class="main-table" style="border: 2px solid #000;">
         <thead>
             <tr>
                 <th rowspan="2" width="15%">Output</th>
                 <th rowspan="2" width="25%">Success Indicators<br>(Targets + Measures)</th>
                 <th rowspan="2" width="40%">Actual Accomplishments</th>
-                <th colspan="4">Rating</th>
+                <th colspan="3">Rating</th>
+                <th rowspan="2" class="rating-col">Average</th>
                 <th rowspan="2" width="10%">Remarks</th>
             </tr>
             <tr>
                 <th class="rating-col">Q</th>
                 <th class="rating-col">E</th>
                 <th class="rating-col">T</th>
-                <th class="rating-col">Avg</th>
+            </tr>
+            <tr>
+                <th colspan="2" style="text-align: left; padding-left: 10px; font-style: italic; font-weight: normal; background: #fff;">TO BE FILLED BEGINNING OF THE SEMESTRAL RATING PERIOD</th>
+                <th colspan="6" style="text-align: left; padding-left: 10px; font-style: italic; font-weight: normal; background: #fff;">TO BE FILLED DURING EVALUATION</th>
             </tr>
         </thead>
         <tbody>
@@ -223,56 +228,70 @@ else $adjectival = "---"; // If completely empty
                 <td class="text-center"><?= $row['e_rating'] ?: '' ?></td>
                 <td class="text-center"><?= $row['t_rating'] ?: '' ?></td>
                 <td class="text-center text-bold"><?= $row['avg'] > 0 ? $row['avg'] : '' ?></td>
-                <td></td>
+                
+                <td style="font-size: 10px; text-align: left; padding: 4px;">
+                    <?= !empty($row['remarks']) ? nl2br(htmlspecialchars($row['remarks'])) : '' ?>
+                </td>
             </tr>
             <?php endforeach; ?>
             
             <tr>
-                <td colspan="6" style="text-align: right; font-weight: bold;">Final Average Rating:</td>
-                <td class="text-center text-bold" style="background: #f0f0f0;"><?= $final_rating ?></td>
+                <td colspan="3" style="font-style: italic; font-size: 9px; padding: 2px 4px; border-right: none;">Note: Use additional sheet/s if necessary:</td>
+                <td style="border-left: none;"></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td colspan="6" style="text-align: right; font-weight: bold; padding: 4px;">Total Rating</td>
+                <td class="text-center text-bold"><?= $grand_total > 0 ? number_format($grand_total, 2) : '' ?></td>
+                <td></td>
+            </tr>
+            <tr>
+                <td colspan="6" style="text-align: right; font-weight: bold; padding: 4px;">Final Average Rating</td>
+                <td class="text-center text-bold"><?= $final_rating ?></td>
                 <td class="text-center text-bold"><?= $adjectival ?></td>
             </tr>
         </tbody>
     </table>
 
-    <div style="font-size: 10px; margin-bottom: 5px;">
-        Rater comments and recommendation for development purposes or rewards/promotion.
-    </div>
-    <div style="border: 1px solid #000; height: 30px; margin-bottom: 10px;"></div>
-
-    <table class="sig-table">
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 5px; border: 2px solid #000;">
         <tr>
-            <td colspan="4" style="font-size: 10px; font-weight: bold; border-bottom: none;">
-                The above rating has been discussed with:
+            <td style="font-size: 10px; padding: 2px 4px; border-bottom: 1px solid #000;">
+                Rater comments and recommendation for development purposes or rewards/promotion. <i style="font-size: 9px;">(Note: Use additional sheet/s if necessary)</i>
             </td>
         </tr>
         <tr>
-            <td width="25%">
-                <div class="sig-label">Name and Signature of Ratee:</div>
-                <br>
-                <div class="sig-name text-underline"><?= htmlspecialchars($user['full_name']) ?></div>
-                <div class="text-center" style="font-size: 10px;"><?= htmlspecialchars($user['position']) ?></div>
-                <div style="margin-top: 10px; font-size: 9px;">Date: ______________</div>
-            </td>
-            <td width="25%">
-                <div class="sig-label">Name and Signature of Initial Rater:</div>
-                <br>
-                <div class="sig-name text-underline">JAN MARK S. GUIBONE</div>
-                <div class="text-center" style="font-size: 10px;">Computer Maintenance Technologist II</div>
-                <div style="margin-top: 10px; font-size: 9px;">Date: ______________</div>
-            </td>
-            <td width="25%">
-                <div class="sig-label">Name and Signature of Final Rater:</div>
-                <br>
-                <div class="sig-name text-underline">JOSE CAESAR A. RADAZA</div>
-                <div class="text-center" style="font-size: 10px;">District Engineer</div>
-                <div style="margin-top: 10px; font-size: 9px;">Date: ______________</div>
-            </td>
-            <td width="25%" style="vertical-align: middle; text-align: center;">
-                 <div style="font-weight: bold; font-size: 10px;">Final Rating</div>
-                 <div style="font-size: 24px; font-weight: bold; margin: 10px 0;"><?= $final_rating ?></div>
-                 <div style="font-size: 11px;"><?= $adjectival ?></div>
-            </td>
+            <td style="height: 25px;"></td>
+        </tr>
+    </table>
+
+    <div style="font-size: 10px; margin-bottom: 2px;">The above rating has been discussed with:</div>
+    <table style="width: 100%; border-collapse: collapse; border: 2px solid #000;">
+        <tr>
+            <td style="width: 13%; font-weight: bold; font-size: 10px; border: 1px solid #000; padding: 4px;">Name and<br>Signature of<br>Ratee:</td>
+            <td style="width: 20%; font-weight: bold; font-size: 11px; text-align: center; border: 1px solid #000; padding: 4px; vertical-align: middle; text-transform: uppercase;"><?= htmlspecialchars($user['full_name']) ?></td>
+            <td style="width: 13%; font-weight: bold; font-size: 10px; border: 1px solid #000; padding: 4px;">Name and Signature<br>of Initial Rater:</td>
+            <td style="width: 20%; font-weight: bold; font-size: 11px; text-align: center; border: 1px solid #000; padding: 4px; vertical-align: middle;">JAN MARK S. GUIBONE</td>
+            <td style="width: 14%; font-weight: bold; font-size: 10px; border: 1px solid #000; padding: 4px;">Name and Signature<br>of Final Rater:</td>
+            <td style="width: 20%; font-weight: bold; font-size: 11px; text-align: center; border: 1px solid #000; padding: 4px; vertical-align: middle;">JOSE CAESAR A. RADAZA</td>
+        </tr>
+        <tr>
+            <td style="font-size: 10px; border: 1px solid #000; padding: 2px 4px;">Position:</td>
+            <td style="font-size: 10px; text-align: center; border: 1px solid #000; padding: 2px 4px;"><?= htmlspecialchars($user['position']) ?> <?= !empty($user['division']) ? '/ ' . htmlspecialchars($user['division']) : '' ?></td>
+            <td style="font-size: 10px; border: 1px solid #000; padding: 2px 4px;">Position:</td>
+            <td style="font-size: 10px; text-align: center; border: 1px solid #000; padding: 2px 4px;">Computer Maintenance Technologist II</td>
+            <td style="font-size: 10px; border: 1px solid #000; padding: 2px 4px;">Position:</td>
+            <td style="font-size: 10px; text-align: center; border: 1px solid #000; padding: 2px 4px;">District Engineer</td>
+        </tr>
+        <tr>
+            <td style="font-size: 10px; border: 1px solid #000; padding: 2px 4px;">Date:</td>
+            <td style="font-size: 10px; text-align: center; border: 1px solid #000; padding: 2px 4px;"></td>
+            <td style="font-size: 10px; border: 1px solid #000; padding: 2px 4px;">Date:</td>
+            <td style="font-size: 10px; text-align: center; border: 1px solid #000; padding: 2px 4px;"></td>
+            <td style="font-size: 10px; border: 1px solid #000; padding: 2px 4px;">Date:</td>
+            <td style="font-size: 10px; text-align: center; border: 1px solid #000; padding: 2px 4px;"></td>
         </tr>
     </table>
 
