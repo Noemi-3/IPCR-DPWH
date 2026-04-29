@@ -63,7 +63,6 @@ document.addEventListener('DOMContentLoaded', function() {
         const totalTasks = taskRows.length;
         let completedTasks = 0;
 
-        // Count how many rows have at least one rating filled out
         taskRows.forEach(row => {
             const q = parseFloat(row.querySelector('input[name^="q["]').value) || 0;
             const e = parseFloat(row.querySelector('input[name^="e["]').value) || 0;
@@ -83,7 +82,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const percentage = totalTasks === 0 ? 0 : (completedTasks / totalTasks) * 100;
             progressBarFill.style.width = `${percentage}%`;
 
-            // Turn Green when 100% complete!
             if (percentage === 100) {
                 progressBarFill.classList.remove('bg-blue-600');
                 progressBarFill.classList.add('bg-emerald-500');
@@ -171,10 +169,80 @@ document.addEventListener('DOMContentLoaded', function() {
         badge.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badgeClass}`;
     }
 
+    // ==========================================
+    // NEW: GRANULAR VALIDATION (ERROR TOASTS)
+    // ==========================================
+    function checkRatingLimits(inputElement, categoryLabel) {
+        const val = parseFloat(inputElement.value);
+        if (val > 5) {
+            inputElement.value = ''; // Clear the bad input
+            if(typeof showToast === 'function') {
+                showToast(`Error: ${categoryLabel} rating cannot exceed 5.`, 'error');
+            } else {
+                alert(`Error: ${categoryLabel} rating cannot exceed 5.`); // Fallback
+            }
+            return false;
+        }
+        if (val < 1 && inputElement.value !== '') {
+             inputElement.value = '';
+             if(typeof showToast === 'function') {
+                showToast(`Error: ${categoryLabel} rating must be at least 1.`, 'error');
+             }
+             return false;
+        }
+        return true;
+    }
+
+    // ==========================================
+    // NEW: AUTO-SAVE DRAFTS (AJAX)
+    // ==========================================
+    let autoSaveTimeout;
+    
+    function triggerAutoSave() {
+        // Clear existing timeout to "debounce" the save (waits until user stops typing)
+        clearTimeout(autoSaveTimeout);
+        
+        autoSaveTimeout = setTimeout(() => {
+            const form = document.getElementById('ipcr-form');
+            if(!form) return;
+
+            // Gather all form data
+            const formData = new FormData(form);
+            
+            // Add a hidden flag so the backend knows this is an autosave request, not a redirect
+            formData.append('is_autosave', '1');
+
+            // Send to save_ipcr.php silently in the background
+            fetch(form.action, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if(response.ok) {
+                    hasUnsavedChanges = false; // Reset the warning flag!
+                    if(typeof showToast === 'function') {
+                        // Create a timestamp
+                        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        showToast(`Draft auto-saved at ${time}`, 'info');
+                    }
+                }
+            })
+            .catch(error => console.error('Auto-save failed:', error));
+            
+        }, 10000); // Wait 10 seconds after user stops typing to trigger save
+    }
+
+
     document.querySelectorAll('.rating-input').forEach(input => {
         if (input.disabled) return; 
         input.addEventListener('input', function() {
             
+            // Trigger our new Validation Check FIRST
+            const categoryName = this.name.includes('q') ? 'Quality' : (this.name.includes('e') ? 'Efficiency' : 'Timeliness');
+            if(!checkRatingLimits(this, categoryName)) {
+                // If it failed validation, we still need to recalculate the row since we wiped the bad number
+            }
+
             hasUnsavedChanges = true;
 
             const row = this.closest('.task-row');
@@ -184,6 +252,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const divArea = document.getElementById('div-' + taskId);
             const hiddenInput = document.getElementById('input-' + taskId);
             const avgCell = document.getElementById('avg-' + taskId);
+            
             const q = parseFloat(row.querySelector(`input[name="q[${taskId}]"]`).value || 0);
             const e = parseFloat(row.querySelector(`input[name="e[${taskId}]"]`).value || 0);
             const t = parseFloat(row.querySelector(`input[name="t[${taskId}]"]`).value || 0);
@@ -207,9 +276,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 hiddenInput.value = "";
             }
             
-            // Trigger our new functions!
             updateGrandTotal();
             updateProgress();
+            
+            // Trigger the new Auto-Save function!
+            triggerAutoSave();
         });
     });
     
@@ -218,6 +289,15 @@ document.addEventListener('DOMContentLoaded', function() {
             hasUnsavedChanges = true;
             const id = this.id.replace('div-', '');
             document.getElementById('input-' + id).value = this.innerHTML;
+            triggerAutoSave(); // Trigger auto-save when editing narratives manually
+        });
+    });
+
+    // Also trigger auto-save when typing Remarks
+    document.querySelectorAll('textarea[name^="remarks"]').forEach(textarea => {
+        textarea.addEventListener('input', function() {
+            hasUnsavedChanges = true;
+            triggerAutoSave();
         });
     });
 
@@ -258,7 +338,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }, 5000);
     }
 
-    // Run calculations once on page load to fill the bar and averages immediately!
     updateGrandTotal();
     updateProgress();
 });

@@ -14,7 +14,7 @@ $sidebar_name = $sidebar_user['full_name'] ?? 'User';
 
 // Define access rules for the sidebar links
 $show_dashboard = ($sidebar_role === 0 || $sidebar_role === 2); // Admins & Mods
-$show_admin_controls = ($sidebar_role === 0); // Only Admins
+$show_admin_controls = ($sidebar_role === 0 || $sidebar_role === 1); // Superadmin & Admins
 
 // DYNAMIC IPCR LABEL
 $ipcr_label = "My IPCR";
@@ -24,7 +24,6 @@ if (isset($_GET['uid']) && $_GET['uid'] != $sidebar_user_id) {
 
 // Define our CSS classes for active vs inactive states
 $active_class = "bg-blue-600 text-white shadow-md shadow-blue-500/20";
-// UPDATED: Inactive links now pop to pure white when hovered!
 $inactive_class = "text-slate-600 hover:bg-white hover:shadow-sm hover:text-blue-700 dark:text-slate-300 dark:hover:bg-slate-800/50 dark:hover:text-white transition-all duration-200";
 
 $active_icon = "text-blue-100";
@@ -111,6 +110,14 @@ $inactive_icon = "text-slate-400 group-hover:text-blue-600 dark:text-slate-500 d
                     </svg>
                     <span class="sidebar-text">Create New Task</span>
                 </a>
+                
+                <a href="admin_management.php" title="System Setup" class="nav-link group flex items-center px-3 py-2.5 mt-2 text-sm font-bold rounded-lg <?= ($current_page == 'admin_management.php') ? $active_class : $inactive_class ?>">
+                    <svg class="nav-icon mr-3 h-5 w-5 flex-shrink-0 <?= ($current_page == 'admin_management.php') ? $active_icon : $inactive_icon ?>" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <span class="sidebar-text">System Setup</span>
+                </a>
             </div>
             <?php endif; ?>
         </nav>
@@ -124,7 +131,8 @@ $inactive_icon = "text-slate-400 group-hover:text-blue-600 dark:text-slate-500 d
             <p class="text-sm font-bold text-slate-800 dark:text-white truncate transition-colors"><?= explode(' ', $sidebar_name)[0] ?></p>
              <p class="text-[11px] font-semibold tracking-wide text-slate-500 dark:text-slate-400 truncate uppercase mt-0.5 transition-colors">
                 <?php 
-                if($sidebar_role === 0) echo "Admin"; 
+                if($sidebar_role === 0) echo "Superadmin"; 
+                elseif($sidebar_role === 1) echo "Admin";
                 elseif($sidebar_role === 2) echo "Moderator"; 
                 else echo "Employee"; 
                 ?>

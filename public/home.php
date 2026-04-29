@@ -12,6 +12,16 @@ $role = (int)$user['role'];
 $is_superadmin = ($role === 0);
 $can_create    = ($role === 0);
 
+// Translate the numeric role to a readable title
+$role_title = "Employee"; // Default fallback
+if ($role === 0) {
+    $role_title = "Superadmin";
+} elseif ($role === 1) {
+    $role_title = "Admin";
+} elseif ($role === 2) {
+    $role_title = "Moderator";
+}
+
 require '../includes/header.php';
 require '../includes/sidebar.php';
 ?>
@@ -27,7 +37,7 @@ require '../includes/sidebar.php';
                 
                 <div class="bg-gradient-to-r from-blue-600 to-blue-800 rounded-2xl shadow-lg p-8 mb-8 text-white flex justify-between items-center">
                     <div>
-                        <h2 class="text-3xl font-black mb-2">Welcome back, <?= htmlspecialchars(explode(' ', $user['full_name'])[0]) ?>!</h2>
+                        <h2 class="text-3xl font-black mb-2">Welcome back, <?= htmlspecialchars($role_title) ?>!</h2>
                         <p class="text-blue-100 text-lg">Select a module below to manage employee performance records.</p>
                     </div>
                     <div class="hidden md:block opacity-80">
